@@ -1,12 +1,12 @@
 # Growthreader
 
-Python utilities for processing BioTek LP600 plate reader exports. The project
+Python utilities for processing Agilent LP600 plate reader exports. The project
 loads the “Raw Data” worksheets from an LP600 workbook, blanks the plate,
 computes per-well log₂ growth rates, and produces CSV and PDF reports that make
 it easy to audit growth behaviour across the plate.
 
 ## Features
-- Parse every `*- Raw Data` worksheet from a BioTek LP600 Excel workbook.
+- Parse every `*- Raw Data` worksheet from an Agilent LP600 Excel workbook.
 - Convert instrument timestamps to monotonic hours, blank wells, and fit
   log₂(OD) models to configurable OD windows.
 - Export growth rates plus the OD bounds that were used for each well so the
