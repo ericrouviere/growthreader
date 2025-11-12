@@ -21,6 +21,9 @@ it easy to audit growth behaviour across the plate.
   “Configuration” section, then run the script to process a workbook.
 - `growth_curves_module.py` – reusable helpers for loading, blanking, fitting,
   and plotting growth data.
+- `pipeline.py` – orchestrates the high-level workflow (loading ranges, fitting
+  slopes, and writing plots/CSVs); you can import `PipelineConfig`/`run_pipeline`
+  from notebooks or other scripts.
 - `LP600_example.xlsx` – sample workbook you can use to test the pipeline.
 - `growth_rates.csv` – CSV output containing one row per plate+well with the
   fitted slope, OD bounds, and fitted time window (regenerated when you re-run
@@ -42,14 +45,14 @@ pip install pandas numpy scipy matplotlib
 
 ## Quick start
 1. Copy your LP600 workbook (`.xlsx`) into the repository (or update
-   `WORKBOOK_PATH` to point elsewhere).
+   `CONFIG.workbook_path` to point elsewhere).
 2. Adjust the configuration block near the top of
    `measure_growth_rates_script.py`. Important knobs include:
-   - `BLANK_POINTS`: how many of the lowest OD readings to average per well.
-   - `DEFAULT_OD_MIN` / `DEFAULT_OD_MAX`: OD bounds for the log₂ fit.
-   - `WINDOW_SIZE`: number of consecutive points that must exceed `OD_min`
+   - `blank_points`: how many of the lowest OD readings to average per well.
+   - `default_od_min` / `default_od_max`: OD bounds for the log₂ fit.
+   - `window_size`: number of consecutive points that must exceed `OD_min`
      before the fit can start.
-   - `GROWTH_RATES_CSV` / `PLOTS_DIR`: output locations.
+   - `growth_rates_csv` / `plots_dir`: output locations.
 3. Run the pipeline:
    ```bash
    python measure_growth_rates_script.py
@@ -86,6 +89,9 @@ automation pipelines.
   better OD window.
 - **Heatmaps look clipped** – set `HEATMAP_VMIN`/`HEATMAP_VMAX` in the script to
   enforce fixed colour limits across plates.
+- **Fontconfig cache errors** – the script now creates local `.cache/` and
+  `.matplotlib_cache/` directories automatically, but if you run the pipeline
+  elsewhere ensure `MPLCONFIGDIR`/`XDG_CACHE_HOME` point to writable paths.
 
 Feel free to open issues or submit PRs if you extend the workflow for other
 plate formats or instruments.

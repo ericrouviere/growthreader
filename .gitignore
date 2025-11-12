@@ -2,3 +2,5 @@ plots/
 __pycache__/
 .DS_Store
 growth_rates.csv
+.cache/
+.matplotlib_cache/

@@ -14,6 +14,7 @@ from .growth_curves_module import (
     plot_growth_rate_heatmap,
     plot_growth_rate_heatmaps,
 )
+from .pipeline import PipelineConfig, run_pipeline
 
 __all__ = [
     "RAW_SUFFIX",
@@ -28,4 +29,6 @@ __all__ = [
     "plot_plate_growth_curves",
     "plot_growth_rate_heatmap",
     "plot_growth_rate_heatmaps",
+    "PipelineConfig",
+    "run_pipeline",
 ]
