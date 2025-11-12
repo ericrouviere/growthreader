@@ -36,15 +36,6 @@ def load_raw_data(workbook_path: Path) -> Dict[str, pd.DataFrame]:
     return data
 
 
-def load_plate_raw_data(
-    data_dir: Path,
-    data_file: str,
-    sheet_name: str = "Plate 1 - Raw Data",
-) -> pd.DataFrame:
-    """Load a single raw sheet (time column plus wells)."""
-    return pd.read_excel(Path(data_dir) / data_file, sheet_name=sheet_name, header=1)
-
-
 def compute_time_in_hours(time_series: Sequence[pd.Timestamp]) -> np.ndarray:
     """Convert Excel timestamps to a monotonic array measured in hours."""
     deltas = []
@@ -67,13 +58,6 @@ def compute_time_in_hours(time_series: Sequence[pd.Timestamp]) -> np.ndarray:
         if hours[idx] < hours[idx - 1]:
             hours[idx] += 24
     return hours
-
-
-def prepare_raw_dataframe(df_raw: pd.DataFrame, time_hours: np.ndarray) -> pd.DataFrame:
-    """Insert the ``Time (hours)`` column while keeping the original headers."""
-    df_prepped = df_raw.rename(columns={"T∞ 600": "Temp"}).copy()
-    df_prepped.insert(2, "Time (hours)", time_hours)
-    return df_prepped
 
 
 def blank_plate_data(frame: pd.DataFrame, n_points_blank: int) -> pd.DataFrame:
@@ -114,16 +98,6 @@ def blank_plate_data(frame: pd.DataFrame, n_points_blank: int) -> pd.DataFrame:
     blanked.attrs["blank_guard_indices"] = guard_indices
     blanked.attrs["blank_indices"] = blank_indices
     return blanked
-
-
-def blank_raw_tables(
-    raw_tables: Dict[str, pd.DataFrame], n_points_blank: int
-) -> Dict[str, pd.DataFrame]:
-    """Apply ``blank_plate_data`` to every sheet in ``raw_tables``."""
-    return {
-        name: blank_plate_data(table, n_points_blank)
-        for name, table in raw_tables.items()
-    }
 
 
 def _linear_fit_log_od(
@@ -551,11 +525,8 @@ def plot_growth_rate_heatmaps(
 __all__ = [
     "RAW_SUFFIX",
     "load_raw_data",
-    "load_plate_raw_data",
     "compute_time_in_hours",
-    "prepare_raw_dataframe",
     "blank_plate_data",
-    "blank_raw_tables",
     "fit_log_od_growth_rate",
     "fit_log_od_growth_rates",
     "plot_plate_growth_curves",

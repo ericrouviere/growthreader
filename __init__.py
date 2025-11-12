@@ -3,11 +3,8 @@
 from .growth_curves_module import (
     RAW_SUFFIX,
     load_raw_data,
-    load_plate_raw_data,
     compute_time_in_hours,
-    prepare_raw_dataframe,
     blank_plate_data,
-    blank_raw_tables,
     fit_log_od_growth_rate,
     fit_log_od_growth_rates,
     plot_plate_growth_curves,
@@ -19,11 +16,8 @@ from .pipeline import PipelineConfig, run_pipeline
 __all__ = [
     "RAW_SUFFIX",
     "load_raw_data",
-    "load_plate_raw_data",
     "compute_time_in_hours",
-    "prepare_raw_dataframe",
     "blank_plate_data",
-    "blank_raw_tables",
     "fit_log_od_growth_rate",
     "fit_log_od_growth_rates",
     "plot_plate_growth_curves",
