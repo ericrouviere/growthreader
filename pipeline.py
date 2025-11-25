@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Mapping
 
+import numpy as np
 import pandas as pd
 
 from growth_curves_module import (
@@ -169,6 +170,11 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
     plates = load_raw_data(config.workbook_path)
     ranges_df = _load_or_initialize_ranges(config, plates)
     per_plate_slopes: Dict[str, Dict[str, float]] = {}
+    plate_plot_jobs = []
+    global_pos_min: float | None = None
+    global_pos_max: float | None = None
+    global_linear_min: float | None = None
+    global_linear_max: float | None = None
 
     config.plots_dir.mkdir(parents=True, exist_ok=True)
 
@@ -219,6 +225,76 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
             .replace(" ", "_")
             .replace(":", "_")
         )
+        plate_values = np.asarray(blanked_plate[wells], dtype=float)
+        positive_vals = plate_values[plate_values > 0]
+        if positive_vals.size:
+            min_positive = float(np.min(positive_vals))
+            max_positive = float(np.max(positive_vals))
+            global_pos_min = (
+                min_positive
+                if global_pos_min is None
+                else min(global_pos_min, min_positive)
+            )
+            global_pos_max = (
+                max_positive
+                if global_pos_max is None
+                else max(global_pos_max, max_positive)
+            )
+        finite_vals = plate_values[np.isfinite(plate_values)]
+        if finite_vals.size:
+            min_linear = float(np.min(finite_vals))
+            max_linear = float(np.max(finite_vals))
+            global_linear_min = (
+                min_linear
+                if global_linear_min is None
+                else min(global_linear_min, min_linear)
+            )
+            global_linear_max = (
+                max_linear
+                if global_linear_max is None
+                else max(global_linear_max, max_linear)
+            )
+
+        plate_plot_jobs.append(
+            {
+                "blanked_plate": blanked_plate,
+                "time_hours": time_hours,
+                "plate_id": plate_id,
+                "safe_plate_name": safe_plate_name,
+                "per_well_ranges": per_well_ranges,
+            }
+        )
+
+    if global_pos_min is not None and global_pos_max is not None:
+        lower = max(global_pos_min * 0.8, 1e-4)
+        upper = global_pos_max * 1.2
+        if lower >= upper:
+            upper = lower * 1.1
+        log_y_limits = (lower, upper)
+    else:
+        log_y_limits = None
+
+    if global_linear_min is not None and global_linear_max is not None:
+        lower_linear = (
+            global_linear_min * 1.2 if global_linear_min < 0 else global_linear_min * 0.8
+        )
+        upper_linear = (
+            global_linear_max * 0.8
+            if global_linear_max < 0
+            else global_linear_max * 1.2
+        )
+        if lower_linear >= upper_linear:
+            upper_linear = lower_linear + abs(lower_linear) * 0.1 + 1e-6
+        linear_y_limits = (lower_linear, upper_linear)
+    else:
+        linear_y_limits = None
+
+    for job in plate_plot_jobs:
+        blanked_plate = job["blanked_plate"]
+        time_hours = job["time_hours"]
+        plate_id = job["plate_id"]
+        per_well_ranges = job["per_well_ranges"]
+        safe_plate_name = job["safe_plate_name"]
         curve_path = config.plots_dir / f"{safe_plate_name}_growth_curves.pdf"
         plot_plate_growth_curves(
             blanked_plate,
@@ -229,13 +305,17 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
             OD_max=config.default_od_max,
             window=config.window_size,
             per_well_ranges=per_well_ranges,
+            y_limits=log_y_limits,
         )
-        linear_curve_path = config.plots_dir / f"{safe_plate_name}_growth_curves_linear.pdf"
+        linear_curve_path = (
+            config.plots_dir / f"{safe_plate_name}_growth_curves_linear.pdf"
+        )
         plot_plate_growth_curves_linear(
             blanked_plate,
             time_hours,
             output_path=linear_curve_path,
             plate_title=f"Plate {plate_id}",
+            y_limits=linear_y_limits,
         )
 
     output_df = _finalize_ranges_dataframe(ranges_df)

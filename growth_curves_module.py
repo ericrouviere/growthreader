@@ -280,6 +280,7 @@ def plot_plate_growth_curves(
     per_well_ranges: Mapping[str, tuple[float, float]] | None = None,
     plate_title: str | None = None,
     figsize: tuple[float, float] = (20.0, 12.0),
+    y_limits: tuple[float, float] | None = None,
 ) -> None:
     """
     Plot all well traces with their fitted log-OD lines on an 8×12 grid.
@@ -297,7 +298,7 @@ def plot_plate_growth_curves(
 
     guard_indices = df_plate.attrs.get("blank_guard_indices", {})
 
-    fig, axes = plt.subplots(8, 12, figsize=figsize, sharex=True, sharey=True)
+    fig, axes = plt.subplots(8, 12, figsize=figsize, sharex=True, sharey=False)
     axes_flat = axes.flatten()
 
     for idx, well in enumerate(wells):
@@ -305,10 +306,12 @@ def plot_plate_growth_curves(
         readings = np.asarray(df_plate[well], dtype=float)
 
         positive_mask = readings > 0
+        positive_values = readings[positive_mask]
+
         if np.any(positive_mask):
             ax.plot(
                 time_axis[positive_mask],
-                readings[positive_mask],
+                positive_values,
                 "o",
                 color="black",
                 markersize=0.5,
@@ -345,17 +348,20 @@ def plot_plate_growth_curves(
         ax.set_yscale("log")
         ax.set_xlim(time_axis[0], time_axis[-1])
 
-        positive_vals = readings[positive_mask]
-        if positive_vals.size:
-            ymin = positive_vals.min()
-            ymax = positive_vals.max()
-            lower = max(ymin * 0.8, 1e-4)
-            upper = ymax * 1.2
-            if lower >= upper:
-                upper = lower * 1.1
-            ax.set_ylim(lower, upper)
+        if y_limits is not None:
+            ax.set_ylim(*y_limits)
         else:
-            ax.set_ylim(1e-4, 1)
+            positive_vals = readings[positive_mask]
+            if positive_vals.size:
+                ymin = positive_vals.min()
+                ymax = positive_vals.max()
+                lower = max(ymin * 0.8, 1e-4)
+                upper = ymax * 1.2
+                if lower >= upper:
+                    upper = lower * 1.1
+                ax.set_ylim(lower, upper)
+            else:
+                ax.set_ylim(1e-4, 1)
 
         if np.isfinite(slope):
             ax.set_title(f"{well} (slope={slope:.3f})", fontsize=6)
@@ -385,6 +391,7 @@ def plot_plate_growth_curves_linear(
     wells: Iterable[str] | None = None,
     plate_title: str | None = None,
     figsize: tuple[float, float] = (20.0, 12.0),
+    y_limits: tuple[float, float] | None = None,
 ) -> None:
     """
     Plot all well traces on an 8×12 grid using a linear y-axis (no fit lines).
@@ -400,7 +407,7 @@ def plot_plate_growth_curves_linear(
             f"Expected at most 96 wells for an 8×12 grid, got {len(wells)}."
         )
 
-    fig, axes = plt.subplots(8, 12, figsize=figsize, sharex=True, sharey=True)
+    fig, axes = plt.subplots(8, 12, figsize=figsize, sharex=True, sharey=False)
     axes_flat = axes.flatten()
 
     for idx, well in enumerate(wells):
@@ -408,6 +415,17 @@ def plot_plate_growth_curves_linear(
         readings = np.asarray(df_plate[well], dtype=float)
 
         ax.plot(time_axis, readings, "o", color="black", markersize=0.5)
+        if y_limits is not None:
+            ax.set_ylim(*y_limits)
+        else:
+            finite_vals = readings[np.isfinite(readings)]
+            if finite_vals.size:
+                ymin = finite_vals.min()
+                ymax = finite_vals.max()
+                margin = (ymax - ymin) * 0.1 if ymax > ymin else max(abs(ymin), 1e-4)
+                ax.set_ylim(ymin - margin, ymax + margin)
+            else:
+                ax.set_ylim(-0.1, 0.1)
         ax.set_title(well, fontsize=6)
         ax.tick_params(labelsize=6)
 
