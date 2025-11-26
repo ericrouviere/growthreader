@@ -4,3 +4,4 @@ __pycache__/
 growth_rates.csv
 .cache/
 .matplotlib_cache/
+src/growthreader.egg-info/

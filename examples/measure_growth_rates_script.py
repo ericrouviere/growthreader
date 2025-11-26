@@ -1,8 +1,8 @@
 """
 Configured pipeline for processing Agilent LP600 growth data.
 
-Edit the values in ``CONFIG`` below to point at your workbook, choose blanking
-parameters, fit bounds, and output locations. Then run the script with
+Edit the values in the parameter block below to point at your workbook, choose
+blanking parameters, fit bounds, and output locations. Then run the script with
 ``python measure_growth_rates_script.py``.
 """
 
@@ -58,7 +58,18 @@ os.environ.setdefault("XDG_CACHE_HOME", str(_XDG_CACHE.resolve()))
 (_XDG_CACHE / "fontconfig").mkdir(parents=True, exist_ok=True)
 _MPL_CACHE.mkdir(parents=True, exist_ok=True)
 
-from pipeline import PipelineConfig, run_pipeline
+try:
+    from growthreader import PipelineConfig, run_pipeline
+except ModuleNotFoundError:  # pragma: no cover - convenience for in-repo runs
+    import sys
+
+    repo_root = Path(__file__).resolve().parent
+    src_dir = repo_root / "src"
+    if src_dir.exists():
+        sys.path.insert(0, str(src_dir))
+        from growthreader import PipelineConfig, run_pipeline
+    else:
+        raise
 
 # ---------------------------------------------------------------------------
 # Configuration
