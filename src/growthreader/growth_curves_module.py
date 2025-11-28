@@ -498,7 +498,6 @@ def plot_growth_rate_heatmap(
                         color="white" if im.norm(value) > 0.5 else "black",
                     )
 
-    ax.invert_yaxis()
     fig.tight_layout()
 
     output_path = Path(output_path)

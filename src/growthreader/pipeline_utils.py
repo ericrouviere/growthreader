@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Sequence
 
+import numpy as np
 import pandas as pd
+
+from .growth_curves_module import (
+    plot_plate_growth_curves,
+    plot_plate_growth_curves_linear,
+)
 
 
 def extract_plate_id(plate_label: str) -> str:
@@ -129,6 +135,99 @@ def finalize_ranges_dataframe(ranges_df: pd.DataFrame) -> pd.DataFrame:
     return output_df
 
 
+def update_global_ranges(
+    plate_values: np.ndarray,
+    pos_min: float | None,
+    pos_max: float | None,
+    linear_min: float | None,
+    linear_max: float | None,
+) -> tuple[float | None, float | None, float | None, float | None]:
+    """Return updated global min/max statistics for log and linear plots."""
+    positive_vals = plate_values[plate_values > 0]
+    if positive_vals.size:
+        min_positive = float(np.min(positive_vals))
+        max_positive = float(np.max(positive_vals))
+        pos_min = min_positive if pos_min is None else min(pos_min, min_positive)
+        pos_max = max_positive if pos_max is None else max(pos_max, max_positive)
+
+    finite_vals = plate_values[np.isfinite(plate_values)]
+    if finite_vals.size:
+        min_linear = float(np.min(finite_vals))
+        max_linear = float(np.max(finite_vals))
+        linear_min = min_linear if linear_min is None else min(linear_min, min_linear)
+        linear_max = max_linear if linear_max is None else max(linear_max, max_linear)
+
+    return pos_min, pos_max, linear_min, linear_max
+
+
+def resolve_plot_limits(
+    pos_min: float | None,
+    pos_max: float | None,
+    lin_min: float | None,
+    lin_max: float | None,
+) -> tuple[tuple[float, float] | None, tuple[float, float] | None]:
+    """Convert raw min/max trackers into padded y-axis limits."""
+    if pos_min is not None and pos_max is not None:
+        lower = max(pos_min * 0.8, 1e-4)
+        upper = pos_max * 1.2
+        if lower >= upper:
+            upper = lower * 1.1
+        log_limits: tuple[float, float] | None = (lower, upper)
+    else:
+        log_limits = None
+
+    if lin_min is not None and lin_max is not None:
+        lower_linear = lin_min * 1.2 if lin_min < 0 else lin_min * 0.8
+        upper_linear = lin_max * 0.8 if lin_max < 0 else lin_max * 1.2
+        if lower_linear >= upper_linear:
+            upper_linear = lower_linear + abs(lower_linear) * 0.1 + 1e-6
+        linear_limits: tuple[float, float] | None = (lower_linear, upper_linear)
+    else:
+        linear_limits = None
+
+    return log_limits, linear_limits
+
+
+def render_plate_plots(
+    plots_dir: Path,
+    plate_jobs: Sequence[dict[str, object]],
+    OD_min: float,
+    OD_max: float,
+    window: int,
+    log_limits: tuple[float, float] | None,
+    linear_limits: tuple[float, float] | None,
+) -> None:
+    """Generate log/linear PDFs for every plate."""
+    for job in plate_jobs:
+        blanked_plate = job["blanked_plate"]
+        time_hours = job["time_hours"]
+        plate_id = job["plate_id"]
+        per_well_ranges = job["per_well_ranges"]
+        safe_plate_name = job["safe_plate_name"]
+
+        curve_path = plots_dir / f"{safe_plate_name}_growth_curves.pdf"
+        plot_plate_growth_curves(
+            blanked_plate,
+            time_hours,
+            output_path=curve_path,
+            plate_title=f"Plate {plate_id}",
+            OD_min=OD_min,
+            OD_max=OD_max,
+            window=window,
+            per_well_ranges=per_well_ranges,
+            y_limits=log_limits,
+        )
+
+        linear_curve_path = plots_dir / f"{safe_plate_name}_growth_curves_linear.pdf"
+        plot_plate_growth_curves_linear(
+            blanked_plate,
+            time_hours,
+            output_path=linear_curve_path,
+            plate_title=f"Plate {plate_id}",
+            y_limits=linear_limits,
+        )
+
+
 __all__ = [
     "canonical_well",
     "display_well",
@@ -137,4 +236,7 @@ __all__ = [
     "load_or_initialize_ranges",
     "plate_token_to_int",
     "split_well",
+    "update_global_ranges",
+    "resolve_plot_limits",
+    "render_plate_plots",
 ]

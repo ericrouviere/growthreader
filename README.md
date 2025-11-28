@@ -41,15 +41,6 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
-Where to install?
-- **Same machine, any directory** – run `pip install -e .` from this repo. The
-  package becomes importable everywhere (e.g., scripts stored with your data in
-  `~/Dropbox/datasets/...`).
-- **System-wide base environment** – `pip install .` (non-editable) if you want
-  a fixed version without an editable checkout.
-- **Per-project envs** – create a `venv` inside each analysis folder and install
-  `growthreader` there if you prefer isolation.
-
 Once installed you *do not need to copy the codebase* again—just copy or
 symlink `measure_growth_rates_script.py`, adjust the paths at the top, and run
 it. All heavy logic lives in the installed package.
