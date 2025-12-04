@@ -68,6 +68,21 @@ it. All heavy logic lives in the installed package.
 5. Open the PDFs inside `plots/` to visually audit the raw curves and the
    heatmaps of per-plate growth rates.
 
+## Simulation regression test
+To verify the pipeline end-to-end, run the bundled regression test:
+
+```bash
+python tests/simulated_growth_pipeline_test.py
+```
+
+The script synthesizes a deterministic LP600 workbook, executes the same
+pipeline used in `measure_growth_rates_script.py`, and writes the outputs to
+`tests/simulated_growth_curves.xlsx`, `tests/growth_rates_test.csv`, and
+`tests/test_plots/`. It then compares every inferred log₂ growth rate against
+the known ground truth slopes and prints per-well relative differences before
+reporting PASS/FAIL. Use this test whenever you modify the fitting logic or
+plotting routines to ensure the numerical behaviour stays consistent.
+
 ## Using the module directly
 Once installed, the helpers can be imported anywhere:
 

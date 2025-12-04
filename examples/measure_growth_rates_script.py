@@ -161,7 +161,7 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
         }
 
         # Fit log-OD slopes for every well.
-        slopes, fit_windows, _ = fit_log_od_growth_rates(
+        slopes, fit_windows, window_indices = fit_log_od_growth_rates(
             blanked_plate,
             time_hours,
             OD_min=config.default_od_min,
@@ -182,7 +182,7 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
             ranges_df.loc[mask, "fit_start_time"] = start_time
             ranges_df.loc[mask, "fit_end_time"] = end_time
 
-        ranges_df = ranges_df.dropna(subset=["slope", "well"]).drop_duplicates(
+        ranges_df = ranges_df.dropna(subset=["well"]).drop_duplicates(
             subset=["plate", "well"], keep="first"
         )
 

@@ -125,18 +125,15 @@ def _linear_fit_log_od(
             f"(got {time_axis.shape} vs {blanked_values.shape})."
         )
 
+    search_start = 0
+    if min_start_idx is not None:
+        search_start = int(max(0, min_start_idx))
+
     start_idx = None
-    for idx in range(0, blanked_values.size - window + 1):
+    for idx in range(search_start, blanked_values.size - window + 1):
         if np.all(blanked_values[idx : idx + window] >= OD_min):
             start_idx = idx
             break
-
-    if min_start_idx is not None:
-        min_start_idx = int(max(0, min_start_idx))
-        if start_idx is None:
-            start_idx = min_start_idx
-        else:
-            start_idx = max(start_idx, min_start_idx)
 
     above_max = np.where(blanked_values >= OD_max)[0]
     end_idx = int(above_max[0]) if above_max.size else blanked_values.size
