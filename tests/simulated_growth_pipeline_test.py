@@ -1,7 +1,7 @@
 """
 Integration script that generates deterministic LP600 growth curves, runs the
-growthreader pipeline, and verifies that the inferred slopes match the
-simulated ground truth.
+growthreader pipeline (same logic as examples/measure_growth_rates_LP600.py),
+and verifies that the inferred slopes match the simulated ground truth.
 """
 
 from __future__ import annotations
@@ -70,7 +70,6 @@ GROWTH_RATES_CSV = Path(__file__).resolve().parent / "growth_rates_test.csv"
 PLOTS_DIR = Path(__file__).resolve().parent / "test_plots"
 DEFAULT_OD_MIN = 0.01
 DEFAULT_OD_MAX = 0.9
-WINDOW_SIZE = 3
 HEATMAP_CMAP = "viridis"
 HEATMAP_VMIN = None
 HEATMAP_VMAX = None
@@ -148,7 +147,6 @@ class PipelineConfig:
     plots_dir: Path = Path("plots")
     default_od_min: float = 0.01
     default_od_max: float = 0.1
-    window_size: int = 3
     heatmap_cmap: str = "viridis"
     heatmap_vmin: float | None = None
     heatmap_vmax: float | None = None
@@ -205,7 +203,6 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
             time_hours,
             OD_min=config.default_od_min,
             OD_max=config.default_od_max,
-            window=config.window_size,
             per_well_ranges=per_well_ranges,
         )
         per_plate_slopes[plate_name] = slopes
@@ -261,7 +258,6 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
         plate_plot_jobs,
         config.default_od_min,
         config.default_od_max,
-        config.window_size,
         log_y_limits,
         linear_y_limits,
     )
@@ -356,7 +352,6 @@ def main() -> None:
         plots_dir=PLOTS_DIR,
         default_od_min=DEFAULT_OD_MIN,
         default_od_max=DEFAULT_OD_MAX,
-        window_size=WINDOW_SIZE,
         heatmap_cmap=HEATMAP_CMAP,
         heatmap_vmin=HEATMAP_VMIN,
         heatmap_vmax=HEATMAP_VMAX,

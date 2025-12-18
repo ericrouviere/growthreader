@@ -15,17 +15,17 @@ from __future__ import annotations
 # Parameters
 # ---------------------------------------------------------------------------
 
-# Excel workbook exported from either the Agilent LP600 or BioTek reader. This can be
+# Excel workbook exported from either the Agilent LP600 or SynergyH1 reader. This can be
 # replaced with an absolute path when the script lives elsewhere.
 WORKBOOK_PATH = "LP600_example.xlsx"
 
-# Measurement source: "lp600" or "biotek".
+# Measurement source: "lp600" or "synergyh1".
 MACHINE = "lp600"
 
-# When parsing BioTek exports, any channel label containing one of these substrings
+# When parsing SynergyH1 exports, any channel label containing one of these substrings
 # will be treated as OD (growth-rate fitting); all other channels are plotted
 # linearly without fitting.
-BIOTEK_OD_KEYWORDS = ("600", "od")
+SYNERGYH1_OD_KEYWORDS = ("600", "od")
 
 # How many of the lowest OD readings per well to average for blanking.
 BLANK_POINTS = 10
@@ -36,14 +36,14 @@ GROWTH_RATES_CSV = "growth_rates.csv"
 # Directory for all generated PDF plots.
 PLOTS_DIR = "plots"
 
+# Fraction of the log-scale upper y-limit used as the fallback lower bound.
+LOG_YLIM_RANGE = 1e-4
+
 # Default lower bound (OD) allowed for the log2 fit unless overridden per well.
 DEFAULT_OD_MIN = 0.01
 
 # Default upper bound (OD) that terminates the fit window unless overridden.
 DEFAULT_OD_MAX = 0.1
-
-# Minimum consecutive time points required above OD_min before fitting begins.
-WINDOW_SIZE = 3
 
 # Matplotlib colormap to use for growth-rate heatmaps.
 HEATMAP_CMAP = "viridis"
@@ -77,15 +77,15 @@ os.environ.setdefault("XDG_CACHE_HOME", str(_XDG_CACHE.resolve()))
 _MPL_CACHE.mkdir(parents=True, exist_ok=True)
 
 from growthreader.growth_curves_module import (
-    BiotekMeasurementBlock,
     blank_plate_data,
     compute_time_in_hours,
     fit_log_od_growth_rates,
-    load_biotek_measurements,
+    load_synergyh1_measurements,
     load_raw_data,
     plot_growth_rate_heatmaps,
     plot_plate_growth_curves,
     plot_plate_growth_curves_linear,
+    SynergyH1MeasurementBlock,
 )
 from growthreader.pipeline_utils import (
     canonical_well,
@@ -109,17 +109,17 @@ class PipelineConfig:
 
     workbook_path: Path
     machine: str = "lp600"
-    biotek_od_keywords: tuple[str, ...] = ("600", "od")
+    synergyh1_od_keywords: tuple[str, ...] = ("600", "od")
     blank_points: int = 10
     growth_rates_csv: Path = Path("growth_rates.csv")
     plots_dir: Path = Path("plots")
     default_od_min: float = 0.01
     default_od_max: float = 0.1
-    window_size: int = 3
     heatmap_cmap: str = "viridis"
     heatmap_vmin: float | None = None
     heatmap_vmax: float | None = None
     heatmap_annotate: bool = True
+    log_ylim_range: float = LOG_YLIM_RANGE
 
     def __post_init__(self) -> None:
         # Normalize paths so users can pass strings/Paths interchangeably.
@@ -127,22 +127,22 @@ class PipelineConfig:
         self.growth_rates_csv = Path(self.growth_rates_csv)
         self.plots_dir = Path(self.plots_dir)
         self.machine = str(self.machine).strip().lower()
-        self.biotek_od_keywords = tuple(self.biotek_od_keywords)
+        self.synergyh1_od_keywords = tuple(self.synergyh1_od_keywords)
 
 
 def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
     """Execute the configured pipeline and return the dataframe written to CSV."""
-    fluorescence_blocks: list[BiotekMeasurementBlock] = []
+    fluorescence_blocks: list[SynergyH1MeasurementBlock] = []
     machine = config.machine
     if machine == "lp600":
         plates = load_raw_data(config.workbook_path)
-    elif machine == "biotek":
-        measurements = load_biotek_measurements(config.workbook_path)
+    elif machine == "synergyh1":
+        measurements = load_synergyh1_measurements(config.workbook_path)
         plates = {}
         for block in measurements:
             treat_as_od = block.measurement_kind == "od"
-            if config.biotek_od_keywords and block.matches_keywords(
-                config.biotek_od_keywords
+            if config.synergyh1_od_keywords and block.matches_keywords(
+                config.synergyh1_od_keywords
             ):
                 treat_as_od = True
             if treat_as_od and block.plate_name not in plates:
@@ -151,7 +151,7 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
                 fluorescence_blocks.append(block)
         if not plates:
             raise ValueError(
-                "No OD measurement blocks detected. Update BIOTEK_OD_KEYWORDS to "
+                "No OD measurement blocks detected. Update SYNERGYH1_OD_KEYWORDS to "
                 "match the channel you want to fit."
             )
     else:
@@ -204,7 +204,6 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
             time_hours,
             OD_min=config.default_od_min,
             OD_max=config.default_od_max,
-            window=config.window_size,
             per_well_ranges=per_well_ranges,
         )
         per_plate_slopes[plate_name] = slopes
@@ -263,9 +262,9 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
         plate_plot_jobs,
         config.default_od_min,
         config.default_od_max,
-        config.window_size,
         log_y_limits,
         linear_y_limits,
+        log_ylim_range=config.log_ylim_range,
     )
 
     # Write the ranges table and any heatmaps to disk.
@@ -284,7 +283,7 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
         )
         print(f"Wrote plots to {config.plots_dir}")
 
-    # Render linear-only fluorescence plots when they were present in BioTek exports.
+    # Render linear-only fluorescence plots when they were present in SynergyH1 exports.
     for block in fluorescence_blocks:
         print(f"Plotting fluorescence block: {block.channel_label}")
         blanked = blank_plate_data(block.dataframe, n_points_blank=config.blank_points)
@@ -313,17 +312,17 @@ if not _WORKBOOK_PATH.is_absolute():
 CONFIG = PipelineConfig(
     workbook_path=_WORKBOOK_PATH,
     machine=MACHINE,
-    biotek_od_keywords=tuple(BIOTEK_OD_KEYWORDS),
+    synergyh1_od_keywords=tuple(SYNERGYH1_OD_KEYWORDS),
     blank_points=BLANK_POINTS,
     growth_rates_csv=Path(GROWTH_RATES_CSV),
     plots_dir=Path(PLOTS_DIR),
     default_od_min=DEFAULT_OD_MIN,
     default_od_max=DEFAULT_OD_MAX,
-    window_size=WINDOW_SIZE,
     heatmap_cmap=HEATMAP_CMAP,
     heatmap_vmin=HEATMAP_VMIN,
     heatmap_vmax=HEATMAP_VMAX,
     heatmap_annotate=HEATMAP_ANNOTATE,
+    log_ylim_range=LOG_YLIM_RANGE,
 )
 
 

@@ -1,17 +1,17 @@
 """Growthreader package exposing growth-rate analysis helpers."""
 
 from .growth_curves_module import (
-    BiotekMeasurementBlock,
     blank_plate_data,
     compute_time_in_hours,
     fit_log_od_growth_rate,
     fit_log_od_growth_rates,
-    load_biotek_measurements,
+    load_synergyh1_measurements,
     load_raw_data,
     plot_growth_rate_heatmap,
     plot_growth_rate_heatmaps,
     plot_plate_growth_curves,
     plot_plate_growth_curves_linear,
+    SynergyH1MeasurementBlock,
 )
 from .pipeline_utils import (
     canonical_well,
@@ -26,11 +26,11 @@ from .pipeline_utils import (
 
 __all__ = [
     "blank_plate_data",
-    "BiotekMeasurementBlock",
+    "SynergyH1MeasurementBlock",
     "compute_time_in_hours",
     "fit_log_od_growth_rate",
     "fit_log_od_growth_rates",
-    "load_biotek_measurements",
+    "load_synergyh1_measurements",
     "load_raw_data",
     "plot_growth_rate_heatmap",
     "plot_growth_rate_heatmaps",

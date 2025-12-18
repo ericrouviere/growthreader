@@ -14,10 +14,12 @@ import pandas as pd
 from scipy import stats
 
 RAW_SUFFIX = " - Raw Data"
+DEFAULT_OD_MIN = 0.01
+DEFAULT_OD_MAX = 0.1
 
 
 @dataclass(frozen=True)
-class BiotekMeasurementBlock:
+class SynergyH1MeasurementBlock:
     """Represents a single measurement block (e.g., OD or fluorescence)."""
 
     plate_name: str
@@ -66,14 +68,14 @@ def _extract_plate_name(sheet: pd.DataFrame) -> str | None:
     return str(value).strip() if pd.notna(value) else None
 
 
-def _infer_biotek_measurement_kind(channel_label: str) -> str:
+def _infer_synergyh1_measurement_kind(channel_label: str) -> str:
     label = str(channel_label).lower()
     if "600" in label or "od" in label:
         return "od"
     return "fluorescence"
 
 
-def _extract_biotek_block(
+def _extract_synergyh1_block(
     sheet: pd.DataFrame,
     header_row_idx: int,
     next_header_idx: int | None,
@@ -124,8 +126,10 @@ def load_raw_data(workbook_path: Path) -> Dict[str, pd.DataFrame]:
     return data
 
 
-def load_biotek_measurements(workbook_path: Path) -> list[BiotekMeasurementBlock]:
-    """Load all measurement blocks (OD + fluorescence) from a BioTek export."""
+def load_synergyh1_measurements(
+    workbook_path: Path,
+) -> list[SynergyH1MeasurementBlock]:
+    """Load all measurement blocks (OD + fluorescence) from a SynergyH1 export."""
     workbook_path = Path(workbook_path)
     if not workbook_path.exists():
         raise FileNotFoundError(f"No such workbook: {workbook_path}")
@@ -146,18 +150,18 @@ def load_biotek_measurements(workbook_path: Path) -> list[BiotekMeasurementBlock
             "Expected rows with (NaN, 'Time', <channel label>)."
         )
 
-    measurements: list[BiotekMeasurementBlock] = []
+    measurements: list[SynergyH1MeasurementBlock] = []
     for idx, header_row_idx in enumerate(header_indices):
         next_idx = header_indices[idx + 1] if idx + 1 < len(header_indices) else None
-        block = _extract_biotek_block(sheet, header_row_idx, next_idx)
+        block = _extract_synergyh1_block(sheet, header_row_idx, next_idx)
         if block is None:
             continue
 
         channel_label = str(sheet.iloc[header_row_idx, 2]).strip()
-        measurement_kind = _infer_biotek_measurement_kind(channel_label)
+        measurement_kind = _infer_synergyh1_measurement_kind(channel_label)
 
         measurements.append(
-            BiotekMeasurementBlock(
+            SynergyH1MeasurementBlock(
                 plate_name=plate_name,
                 channel_label=channel_label,
                 dataframe=block,
@@ -261,22 +265,32 @@ def _resolve_linear_limits(values: np.ndarray) -> tuple[float, float] | None:
     return lower, upper
 
 
-def _linear_fit_log_od(
+def _normalize_log_limits(
+    y_limits: tuple[float, float] | None,
+    log_ylim_range: float,
+) -> tuple[float, float] | None:
+    """Clamp log-scale limits to positive values using a fallback range."""
+    if y_limits is None:
+        return None
+    lower, upper = y_limits
+    if upper <= 0:
+        return (max(upper, 1e-12), max(upper * (1 + log_ylim_range), 1e-12))
+    if lower <= 0:
+        safe_lower = max(upper * log_ylim_range, 1e-12)
+        return (safe_lower, upper)
+    return y_limits
+
+
+def _fit_log_od_peak(
     blanked_readings: Sequence[float],
     time_hours: Sequence[float],
     OD_min: float,
     OD_max: float,
-    window: int,
     min_start_idx: int | None = None,
 ) -> tuple[float, float, np.ndarray | None, int | None, int | None]:
-    """
-    Internal helper that performs the log2 linear regression and returns
-    (slope, intercept, x_fit). ``x_fit`` is ``None`` when the fit fails.
-    """
-    if window < 1:
-        raise ValueError("window must be at least 1")
-    if OD_min <= 0:
-        raise ValueError("OD_min must be positive")
+    """Perform log2 regression using the peak-descend window selection."""
+    if OD_min <= 0 or OD_max <= 0:
+        raise ValueError("OD bounds must be positive.")
 
     time_axis = np.asarray(time_hours, dtype=float)
     blanked_values = np.asarray(blanked_readings, dtype=float)
@@ -286,32 +300,61 @@ def _linear_fit_log_od(
             f"(got {time_axis.shape} vs {blanked_values.shape})."
         )
 
-    search_start = 0
-    if min_start_idx is not None:
-        search_start = int(max(0, min_start_idx))
+    finite_mask = np.isfinite(blanked_values)
+    if not np.any(finite_mask):
+        return float("nan"), float("nan"), None, None, None
+    readings = blanked_values.astype(float, copy=True)
+    readings[~finite_mask] = np.nan
 
-    start_idx = None
-    for idx in range(search_start, blanked_values.size - window + 1):
-        if np.all(blanked_values[idx : idx + window] >= OD_min):
-            start_idx = idx
+    try:
+        peak_idx = int(np.nanargmax(readings))
+    except ValueError:
+        return float("nan"), float("nan"), None, None, None
+
+    search_floor = 0 if min_start_idx is None else int(max(0, min_start_idx))
+    max_index = readings.shape[0] - 1
+    if max_index < 0 or search_floor > max_index:
+        return float("nan"), float("nan"), None, None, None
+    peak_idx = min(max(peak_idx, search_floor), max_index)
+
+    def _find_index_below(threshold: float, start_idx: int) -> int | None:
+        idx = start_idx
+        while idx >= search_floor:
+            value = readings[idx]
+            if np.isfinite(value) and value < threshold:
+                return idx
+            idx -= 1
+        return None
+
+    upper_idx = _find_index_below(OD_max, peak_idx)
+    if upper_idx is None:
+        return float("nan"), float("nan"), None, None, None
+
+    lower_idx = None
+    idx = upper_idx
+    while idx >= search_floor:
+        value = readings[idx]
+        if np.isfinite(value) and value < OD_min:
+            lower_idx = idx + 1
             break
+        idx -= 1
+    if lower_idx is None:
+        lower_idx = search_floor
 
-    above_max = np.where(blanked_values >= OD_max)[0]
-    end_idx = int(above_max[0]) if above_max.size else blanked_values.size
+    if lower_idx >= upper_idx:
+        return float("nan"), float("nan"), None, lower_idx, upper_idx
 
-    if start_idx is None or end_idx <= start_idx + 1:
+    start_idx = lower_idx
+    end_idx = upper_idx + 1
+
+    slice_values = readings[start_idx:end_idx]
+    slice_times = time_axis[start_idx:end_idx]
+    positive_mask = np.isfinite(slice_values) & (slice_values > 0)
+    if np.count_nonzero(positive_mask) < 2:
         return float("nan"), float("nan"), None, start_idx, end_idx
 
-    x_fit = time_axis[start_idx:end_idx]
-    y_slice = blanked_values[start_idx:end_idx]
-    positive_mask = y_slice > 0
-    x_fit = x_fit[positive_mask]
-    y_slice = y_slice[positive_mask]
-
-    if x_fit.size < 2:
-        return float("nan"), float("nan"), None, start_idx, end_idx
-
-    y_fit = np.log2(y_slice)
+    x_fit = slice_times[positive_mask]
+    y_fit = np.log2(slice_values[positive_mask])
     if not np.all(np.isfinite(y_fit)):
         return float("nan"), float("nan"), None, start_idx, end_idx
 
@@ -322,24 +365,15 @@ def _linear_fit_log_od(
 def fit_log_od_growth_rate(
     readings: Sequence[float],
     time_hours: Sequence[float],
-    OD_min: float = 0.01,
-    OD_max: float = 0.1,
-    window: int = 3,
+    OD_min: float = DEFAULT_OD_MIN,
+    OD_max: float = DEFAULT_OD_MAX,
 ) -> float:
-    """
-    Fit a linear model to log2-transformed readings and return the slope.
-
-    ``window`` controls how many consecutive points must exceed ``OD_min`` to
-    mark the start of the fit. The fit ends at the first reading >= ``OD_max``
-    (or at the end of the series if that never occurs). Returns ``np.nan`` if
-    a valid fit cannot be computed.
-    """
-    slope, _intercept, _, _, _ = _linear_fit_log_od(
+    """Fit a log2-growth slope using the peak-descend window heuristic."""
+    slope, _intercept, _, _, _ = _fit_log_od_peak(
         blanked_readings=readings,
         time_hours=time_hours,
         OD_min=OD_min,
         OD_max=OD_max,
-        window=window,
     )
     return float(slope)
 
@@ -348,9 +382,8 @@ def fit_log_od_growth_rates(
     df_plate: pd.DataFrame,
     time_hours: Sequence[float],
     wells: Iterable[str] | None = None,
-    OD_min: float = 0.01,
-    OD_max: float = 0.1,
-    window: int = 3,
+    OD_min: float = DEFAULT_OD_MIN,
+    OD_max: float = DEFAULT_OD_MAX,
     per_well_ranges: Mapping[str, tuple[float, float]] | None = None,
 ) -> tuple[
     Dict[str, float],
@@ -381,12 +414,11 @@ def fit_log_od_growth_rates(
         else:
             od_min, od_max = OD_min, OD_max
         min_start_idx = guard_indices.get(well)
-        slope, _intercept, _, start_idx, end_idx = _linear_fit_log_od(
+        slope, _intercept, _, start_idx, end_idx = _fit_log_od_peak(
             blanked_readings=blanked_readings,
             time_hours=time_axis,
             OD_min=od_min,
             OD_max=od_max,
-            window=window,
             min_start_idx=None if min_start_idx is None else min_start_idx + 1,
         )
         results[well] = float(slope)
@@ -434,11 +466,11 @@ def plot_plate_growth_curves(
     wells: Iterable[str] | None = None,
     OD_min: float = 0.01,
     OD_max: float = 0.1,
-    window: int = 3,
     per_well_ranges: Mapping[str, tuple[float, float]] | None = None,
     plate_title: str | None = None,
     figsize: tuple[float, float] = (20.0, 12.0),
     y_limits: tuple[float, float] | None = None,
+    log_ylim_range: float = 1e-4,
 ) -> None:
     """
     Plot all well traces with their fitted log-OD lines on an 8×12 grid.
@@ -456,9 +488,11 @@ def plot_plate_growth_curves(
 
     guard_indices = df_plate.attrs.get("blank_guard_indices", {})
 
-    if y_limits is None:
+    resolved_y_limits: tuple[float, float] | None = y_limits
+    if resolved_y_limits is None:
         plate_values = np.asarray(df_plate[wells], dtype=float)
-        y_limits = _resolve_linear_limits(plate_values)
+        resolved_y_limits = _resolve_linear_limits(plate_values)
+    resolved_y_limits = _normalize_log_limits(resolved_y_limits, log_ylim_range)
 
     fig, axes = plt.subplots(8, 12, figsize=figsize, sharex=True, sharey=False)
     axes_flat = axes.flatten()
@@ -488,12 +522,11 @@ def plot_plate_growth_curves(
             od_min, od_max = OD_min, OD_max
 
         guard_idx = guard_indices.get(well)
-        slope, intercept, x_fit, start_idx, end_idx = _linear_fit_log_od(
+        slope, intercept, x_fit, start_idx, end_idx = _fit_log_od_peak(
             blanked_readings=readings,
             time_hours=time_axis,
             OD_min=od_min,
             OD_max=od_max,
-            window=window,
             min_start_idx=None if guard_idx is None else guard_idx + 1,
         )
 
@@ -510,8 +543,8 @@ def plot_plate_growth_curves(
         ax.set_yscale("log")
         ax.set_xlim(time_axis[0], time_axis[-1])
 
-        if y_limits is not None:
-            ax.set_ylim(*y_limits)
+        if resolved_y_limits is not None:
+            ax.set_ylim(*resolved_y_limits)
         else:
             positive_vals = readings[positive_mask]
             if positive_vals.size:
@@ -521,7 +554,8 @@ def plot_plate_growth_curves(
                 upper = ymax * 1.2
                 if lower >= upper:
                     upper = lower * 1.1
-                ax.set_ylim(lower, upper)
+                local_limits = _normalize_log_limits((lower, upper), log_ylim_range)
+                ax.set_ylim(*local_limits)
             else:
                 ax.set_ylim(1e-4, 1)
 

@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from growthreader import load_biotek_measurements
+from growthreader import load_synergyh1_measurements
 
 
-def test_load_biotek_measurements_extracts_all_channels() -> None:
-    workbook = Path("examples/Biotek_fluorescence_example.xlsx")
-    blocks = load_biotek_measurements(workbook)
+def test_load_synergyh1_measurements_extracts_all_channels() -> None:
+    workbook = Path("examples/SynergyH1_example.xlsx")
+    blocks = load_synergyh1_measurements(workbook)
     assert len(blocks) == 3
 
     kinds = [block.measurement_kind for block in blocks]

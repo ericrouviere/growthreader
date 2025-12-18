@@ -193,9 +193,9 @@ def render_plate_plots(
     plate_jobs: Sequence[dict[str, object]],
     OD_min: float,
     OD_max: float,
-    window: int,
     log_limits: tuple[float, float] | None,
     linear_limits: tuple[float, float] | None,
+    log_ylim_range: float = 1e-4,
 ) -> None:
     """Generate log/linear PDFs for every plate."""
     for job in plate_jobs:
@@ -213,9 +213,9 @@ def render_plate_plots(
             plate_title=f"Plate {plate_id}",
             OD_min=OD_min,
             OD_max=OD_max,
-            window=window,
             per_well_ranges=per_well_ranges,
             y_limits=log_limits,
+            log_ylim_range=log_ylim_range,
         )
 
         linear_curve_path = plots_dir / f"{safe_plate_name}_growth_curves_linear.pdf"
