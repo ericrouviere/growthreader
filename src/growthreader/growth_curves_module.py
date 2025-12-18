@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Minimal helpers for loading and processing BioTek LP600 raw plate data."""
+"""Minimal helpers for loading and processing plate-reader data."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, time
 from pathlib import Path
 from typing import Dict, Iterable, Mapping, Sequence
@@ -13,6 +14,93 @@ import pandas as pd
 from scipy import stats
 
 RAW_SUFFIX = " - Raw Data"
+
+
+@dataclass(frozen=True)
+class BiotekMeasurementBlock:
+    """Represents a single measurement block (e.g., OD or fluorescence)."""
+
+    plate_name: str
+    channel_label: str
+    dataframe: pd.DataFrame
+    measurement_kind: str
+
+    def matches_keywords(self, keywords: Sequence[str]) -> bool:
+        """Return True if ``channel_label`` contains any keyword."""
+        label = self.channel_label.lower()
+        return any(keyword.lower() in label for keyword in keywords)
+
+    def safe_label(self) -> str:
+        """Return a filesystem-friendly identifier for naming outputs."""
+        safe_plate = _sanitize_label(self.plate_name)
+        safe_channel = _sanitize_label(self.channel_label)
+        return f"{safe_plate}_{safe_channel}"
+
+
+def _sanitize_label(label: str) -> str:
+    label = str(label)
+    cleaned = "".join(ch if ch.isalnum() else "_" for ch in label)
+    while "__" in cleaned:
+        cleaned = cleaned.replace("__", "_")
+    return cleaned.strip("_") or "measurement"
+
+
+def _is_well_label(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    value = value.strip().upper()
+    if len(value) < 2:
+        return False
+    row_char = value[0]
+    col_part = value[1:]
+    return row_char in "ABCDEFGH" and col_part.isdigit()
+
+
+def _extract_plate_name(sheet: pd.DataFrame) -> str | None:
+    first_col = sheet.iloc[:, 0]
+    mask = first_col.astype(str).str.contains("Plate Number", case=False, na=False)
+    indices = sheet.index[mask].tolist()
+    if not indices:
+        return None
+    value = sheet.iloc[indices[0], 1]
+    return str(value).strip() if pd.notna(value) else None
+
+
+def _infer_biotek_measurement_kind(channel_label: str) -> str:
+    label = str(channel_label).lower()
+    if "600" in label or "od" in label:
+        return "od"
+    return "fluorescence"
+
+
+def _extract_biotek_block(
+    sheet: pd.DataFrame,
+    header_row_idx: int,
+    next_header_idx: int | None,
+) -> pd.DataFrame | None:
+    """Slice a measurement block using the header row definition."""
+    header_row = sheet.iloc[header_row_idx]
+    valid_columns = header_row[header_row.notna()]
+    if "Time" not in valid_columns.values:
+        return None
+    start_idx = header_row_idx + 1
+    end_idx = next_header_idx if next_header_idx is not None else len(sheet)
+    block = sheet.iloc[start_idx:end_idx, valid_columns.index].copy()
+    block.columns = valid_columns.tolist()
+    if block.empty:
+        return None
+
+    if "Time" not in block.columns:
+        return None
+
+    block = block.dropna(subset=["Time"], how="all")
+    well_columns = [col for col in block.columns if _is_well_label(col)]
+    if not well_columns:
+        return None
+
+    output = block[["Time"] + well_columns].copy()
+    output.reset_index(drop=True, inplace=True)
+    return output
 
 
 def load_raw_data(workbook_path: Path) -> Dict[str, pd.DataFrame]:
@@ -34,6 +122,55 @@ def load_raw_data(workbook_path: Path) -> Dict[str, pd.DataFrame]:
         frame = frame.dropna(axis=1, how="all").copy()
         data[sheet] = frame
     return data
+
+
+def load_biotek_measurements(workbook_path: Path) -> list[BiotekMeasurementBlock]:
+    """Load all measurement blocks (OD + fluorescence) from a BioTek export."""
+    workbook_path = Path(workbook_path)
+    if not workbook_path.exists():
+        raise FileNotFoundError(f"No such workbook: {workbook_path}")
+
+    sheet = pd.read_excel(workbook_path, sheet_name=0, header=None)
+    plate_name = _extract_plate_name(sheet) or "Plate 1"
+    first_col = sheet.iloc[:, 0]
+    second_col = sheet.iloc[:, 1].astype(str).str.strip()
+    header_mask = (
+        first_col.isna()
+        & (second_col.str.lower() == "time")
+        & sheet.iloc[:, 2].notna()
+    )
+    header_indices = sheet.index[header_mask].tolist()
+    if not header_indices:
+        raise ValueError(
+            f"No measurement blocks detected in {workbook_path.name}. "
+            "Expected rows with (NaN, 'Time', <channel label>)."
+        )
+
+    measurements: list[BiotekMeasurementBlock] = []
+    for idx, header_row_idx in enumerate(header_indices):
+        next_idx = header_indices[idx + 1] if idx + 1 < len(header_indices) else None
+        block = _extract_biotek_block(sheet, header_row_idx, next_idx)
+        if block is None:
+            continue
+
+        channel_label = str(sheet.iloc[header_row_idx, 2]).strip()
+        measurement_kind = _infer_biotek_measurement_kind(channel_label)
+
+        measurements.append(
+            BiotekMeasurementBlock(
+                plate_name=plate_name,
+                channel_label=channel_label,
+                dataframe=block,
+                measurement_kind=measurement_kind,
+            )
+        )
+
+    if not measurements:
+        raise ValueError(
+            f"Found measurement headers in {workbook_path.name} but could not "
+            "extract any data tables."
+        )
+    return measurements
 
 
 def compute_time_in_hours(time_series: Sequence[pd.Timestamp]) -> np.ndarray:
@@ -75,6 +212,12 @@ def blank_plate_data(frame: pd.DataFrame, n_points_blank: int) -> pd.DataFrame:
     value_cols = list(frame.columns[1:])
 
     numeric_values = frame[value_cols].apply(pd.to_numeric, errors="coerce")
+    empty_cols = [col for col in value_cols if numeric_values[col].dropna().empty]
+    if empty_cols:
+        numeric_values = numeric_values.drop(columns=empty_cols)
+        value_cols = [col for col in value_cols if col not in empty_cols]
+        if not value_cols:
+            raise ValueError("All well columns are empty; nothing to blank.")
     # Old approach (mean of first N timepoints):
     # blanks = numeric_values.iloc[:n_points_blank].mean(axis=0)
 
@@ -92,12 +235,30 @@ def blank_plate_data(frame: pd.DataFrame, n_points_blank: int) -> pd.DataFrame:
         guard_indices[col] = int(values.index.max())
         blank_indices[col] = [int(idx) for idx in values.index.tolist()]
 
-    blanked = frame.copy()
+    blanked = frame[[time_col] + value_cols].copy()
     blanked[value_cols] = numeric_values.sub(pd.Series(blanks), axis=1)
     blanked[time_col] = frame[time_col]
     blanked.attrs["blank_guard_indices"] = guard_indices
     blanked.attrs["blank_indices"] = blank_indices
     return blanked
+
+
+def _resolve_linear_limits(values: np.ndarray) -> tuple[float, float] | None:
+    """Return padded (min, max) bounds for linear axes or None if empty."""
+    finite_vals = values[np.isfinite(values)]
+    if finite_vals.size == 0:
+        return None
+    vmin = float(finite_vals.min())
+    vmax = float(finite_vals.max())
+    if vmin == vmax:
+        delta = abs(vmin) * 0.1 if vmin != 0 else 1e-3
+        vmin -= delta
+        vmax += delta
+    lower = vmin * 1.2 if vmin < 0 else vmin * 0.8
+    upper = vmax * 0.8 if vmax < 0 else vmax * 1.2
+    if lower >= upper:
+        upper = lower + abs(lower) * 0.1 + 1e-6
+    return lower, upper
 
 
 def _linear_fit_log_od(
@@ -295,6 +456,10 @@ def plot_plate_growth_curves(
 
     guard_indices = df_plate.attrs.get("blank_guard_indices", {})
 
+    if y_limits is None:
+        plate_values = np.asarray(df_plate[wells], dtype=float)
+        y_limits = _resolve_linear_limits(plate_values)
+
     fig, axes = plt.subplots(8, 12, figsize=figsize, sharex=True, sharey=False)
     axes_flat = axes.flatten()
 
@@ -404,6 +569,10 @@ def plot_plate_growth_curves_linear(
             f"Expected at most 96 wells for an 8×12 grid, got {len(wells)}."
         )
 
+    if y_limits is None:
+        plate_values = np.asarray(df_plate[wells], dtype=float)
+        y_limits = _resolve_linear_limits(plate_values)
+
     fig, axes = plt.subplots(8, 12, figsize=figsize, sharex=True, sharey=False)
     axes_flat = axes.flatten()
 
@@ -415,14 +584,7 @@ def plot_plate_growth_curves_linear(
         if y_limits is not None:
             ax.set_ylim(*y_limits)
         else:
-            finite_vals = readings[np.isfinite(readings)]
-            if finite_vals.size:
-                ymin = finite_vals.min()
-                ymax = finite_vals.max()
-                margin = (ymax - ymin) * 0.1 if ymax > ymin else max(abs(ymin), 1e-4)
-                ax.set_ylim(ymin - margin, ymax + margin)
-            else:
-                ax.set_ylim(-0.1, 0.1)
+            ax.set_ylim(-0.1, 0.1)
         ax.set_title(well, fontsize=6)
         ax.tick_params(labelsize=6)
 

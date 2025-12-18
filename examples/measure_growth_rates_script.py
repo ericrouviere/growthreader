@@ -15,9 +15,17 @@ from __future__ import annotations
 # Parameters
 # ---------------------------------------------------------------------------
 
-# Excel workbook exported from the Agilent LP600 (relative or absolute path).
-# This can be replaced with an absolute path when the script lives elsewhere.
+# Excel workbook exported from either the Agilent LP600 or BioTek reader. This can be
+# replaced with an absolute path when the script lives elsewhere.
 WORKBOOK_PATH = "LP600_example.xlsx"
+
+# Measurement source: "lp600" or "biotek".
+MACHINE = "lp600"
+
+# When parsing BioTek exports, any channel label containing one of these substrings
+# will be treated as OD (growth-rate fitting); all other channels are plotted
+# linearly without fitting.
+BIOTEK_OD_KEYWORDS = ("600", "od")
 
 # How many of the lowest OD readings per well to average for blanking.
 BLANK_POINTS = 10
@@ -69,9 +77,11 @@ os.environ.setdefault("XDG_CACHE_HOME", str(_XDG_CACHE.resolve()))
 _MPL_CACHE.mkdir(parents=True, exist_ok=True)
 
 from growthreader.growth_curves_module import (
+    BiotekMeasurementBlock,
     blank_plate_data,
     compute_time_in_hours,
     fit_log_od_growth_rates,
+    load_biotek_measurements,
     load_raw_data,
     plot_growth_rate_heatmaps,
     plot_plate_growth_curves,
@@ -98,6 +108,8 @@ class PipelineConfig:
     """User-tunable knobs for the growth-rate pipeline."""
 
     workbook_path: Path
+    machine: str = "lp600"
+    biotek_od_keywords: tuple[str, ...] = ("600", "od")
     blank_points: int = 10
     growth_rates_csv: Path = Path("growth_rates.csv")
     plots_dir: Path = Path("plots")
@@ -114,12 +126,38 @@ class PipelineConfig:
         self.workbook_path = Path(self.workbook_path)
         self.growth_rates_csv = Path(self.growth_rates_csv)
         self.plots_dir = Path(self.plots_dir)
+        self.machine = str(self.machine).strip().lower()
+        self.biotek_od_keywords = tuple(self.biotek_od_keywords)
 
 
 def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
     """Execute the configured pipeline and return the dataframe written to CSV."""
+    fluorescence_blocks: list[BiotekMeasurementBlock] = []
+    machine = config.machine
+    if machine == "lp600":
+        plates = load_raw_data(config.workbook_path)
+    elif machine == "biotek":
+        measurements = load_biotek_measurements(config.workbook_path)
+        plates = {}
+        for block in measurements:
+            treat_as_od = block.measurement_kind == "od"
+            if config.biotek_od_keywords and block.matches_keywords(
+                config.biotek_od_keywords
+            ):
+                treat_as_od = True
+            if treat_as_od and block.plate_name not in plates:
+                plates[block.plate_name] = block.dataframe
+            else:
+                fluorescence_blocks.append(block)
+        if not plates:
+            raise ValueError(
+                "No OD measurement blocks detected. Update BIOTEK_OD_KEYWORDS to "
+                "match the channel you want to fit."
+            )
+    else:
+        raise ValueError(f"Unsupported machine '{config.machine}'.")
+
     # Load all plate worksheets and either read the previous ranges CSV or create defaults.
-    plates = load_raw_data(config.workbook_path)
     ranges_df = load_or_initialize_ranges(
         config.growth_rates_csv,
         plates,
@@ -246,6 +284,19 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
         )
         print(f"Wrote plots to {config.plots_dir}")
 
+    # Render linear-only fluorescence plots when they were present in BioTek exports.
+    for block in fluorescence_blocks:
+        print(f"Plotting fluorescence block: {block.channel_label}")
+        blanked = blank_plate_data(block.dataframe, n_points_blank=config.blank_points)
+        time_hours = compute_time_in_hours(blanked["Time"])
+        output_path = config.plots_dir / f"{block.safe_label()}_linear.pdf"
+        plot_plate_growth_curves_linear(
+            blanked,
+            time_hours,
+            output_path=output_path,
+            plate_title=f"{block.plate_name} - {block.channel_label}",
+        )
+
     print("Done.")
     return output_df
 
@@ -261,6 +312,8 @@ if not _WORKBOOK_PATH.is_absolute():
 
 CONFIG = PipelineConfig(
     workbook_path=_WORKBOOK_PATH,
+    machine=MACHINE,
+    biotek_od_keywords=tuple(BIOTEK_OD_KEYWORDS),
     blank_points=BLANK_POINTS,
     growth_rates_csv=Path(GROWTH_RATES_CSV),
     plots_dir=Path(PLOTS_DIR),

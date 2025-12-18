@@ -1,12 +1,15 @@
 # Growthreader
 
-Python utilities for processing Agilent LP600 plate reader exports. The project
-loads the “Raw Data” worksheets from an LP600 workbook, blanks the plate,
-computes per-well log₂ growth rates, and produces CSV and PDF reports that make
-it easy to audit growth behaviour across the plate.
+Python utilities for processing Agilent LP600 and BioTek plate reader exports.
+The project loads the “Raw Data” worksheets from an LP600 workbook (or the
+channel blocks from a BioTek export), blanks the plate, computes per-well log₂
+growth rates, and produces CSV and PDF reports that make it easy to audit
+growth and fluorescence behaviour across the plate.
 
 ## Features
 - Parse every `*- Raw Data` worksheet from an Agilent LP600 Excel workbook.
+- Extract all OD + fluorescence channels from a BioTek workbook (one plate per
+  file) and generate linear fluorescence plots automatically.
 - Convert instrument timestamps to monotonic hours, blank wells, and fit
   log₂(OD) models to configurable OD windows.
 - Export growth rates plus the OD bounds that were used for each well so the
@@ -52,11 +55,15 @@ it. All heavy logic lives in the installed package.
    place) and set `WORKBOOK_PATH` to your LP600 workbook path.
 2. Adjust the configuration block near the top of
    `measure_growth_rates_script.py`. Important knobs include:
+   - `machine`: `"lp600"` (default) or `"biotek"` to switch parsers.
    - `blank_points`: how many of the lowest OD readings to average per well.
    - `default_od_min` / `default_od_max`: OD bounds for the log₂ fit.
    - `window_size`: number of consecutive points that must exceed `OD_min`
      before the fit can start.
    - `growth_rates_csv` / `plots_dir`: output locations.
+   - `BIOTEK_OD_KEYWORDS`: when using BioTek data, any channel label containing
+     one of these substrings is treated as OD (the rest are plotted on linear
+     axes without fitting).
 3. Run the pipeline from the directory containing the script:
    ```bash
    python measure_growth_rates_script.py
@@ -118,4 +125,5 @@ automation pipelines.
   elsewhere ensure `MPLCONFIGDIR`/`XDG_CACHE_HOME` point to writable paths.
 
 Feel free to open issues or submit PRs if you extend the workflow for other
-plate formats or instruments.
+plate formats or instruments—the new BioTek loader is a template for adding
+future readers.
