@@ -101,6 +101,8 @@ def _extract_synergyh1_block(
         return None
 
     output = block[["Time"] + well_columns].copy()
+    # Drop trailing/empty rows with no well data (often padded with 00:00:00 times).
+    output = output[~output[well_columns].isna().all(axis=1)]
     output.reset_index(drop=True, inplace=True)
     return output
 
@@ -179,8 +181,25 @@ def load_synergyh1_measurements(
 
 def compute_time_in_hours(time_series: Sequence[pd.Timestamp]) -> np.ndarray:
     """Convert Excel timestamps to a monotonic array measured in hours."""
+    values = list(time_series)
+    if not values:
+        return np.asarray([], dtype=float)
+
+    datetime_like = (pd.Timestamp, datetime, np.datetime64)
+    has_time_like = any(isinstance(v, (pd.Timedelta, np.timedelta64, time)) for v in values)
+    has_datetime_like = any(isinstance(v, datetime_like) for v in values)
+
+    if has_datetime_like and not has_time_like:
+        dt = pd.to_datetime(values, errors="coerce")
+        if dt.isna().any():
+            raise ValueError("Encountered non-datetime values in time series.")
+        # If dates are present, use them; otherwise fall back to time-of-day handling.
+        if len({d.date() for d in dt}) > 1:
+            deltas = dt - dt.iloc[0]
+            return np.asarray(deltas.dt.total_seconds() / 3600, dtype=float)
+
     deltas = []
-    for value in time_series:
+    for value in values:
         if isinstance(value, pd.Timedelta):
             delta = value
         elif isinstance(value, np.timedelta64):
@@ -195,9 +214,11 @@ def compute_time_in_hours(time_series: Sequence[pd.Timestamp]) -> np.ndarray:
 
     td = pd.to_timedelta(deltas)
     hours = np.asarray(td.total_seconds() / 3600, dtype=float)
+    day_offset = 0.0
     for idx in range(1, hours.size):
-        if hours[idx] < hours[idx - 1]:
-            hours[idx] += 24
+        if hours[idx] + day_offset < hours[idx - 1]:
+            day_offset += 24.0
+        hours[idx] += day_offset
     return hours
 
 
