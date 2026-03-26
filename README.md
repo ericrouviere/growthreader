@@ -2,15 +2,16 @@
 
 Utilities for processing Agilent LP600 and SynergyH1 plate-reader exports.
 The toolkit blanks raw workbooks, converts timestamps to hours, fits
-per‑well log₂ growth rates, and emits CSV + PDF reports so you can audit OD and
+per‑well growth rates (μ, hr⁻¹), and emits CSV + PDF reports so you can audit OD and
 fluorescence behaviour quickly.
 
 ## Highlights
 - Parse every `*- Raw Data` worksheet from LP600 Excel files.
 - Load SynergyH1 exports (one plate per file) and pull every OD or
   fluorescence channel automatically.
-- Blank wells, fit log₂(OD) models between configurable `OD_min`/`OD_max`
-  bounds, and record the exact window chosen for each well.
+- Blank wells, fit ln(OD) models between configurable `OD_min`/`OD_max`
+  bounds, and record the exact window chosen for each well. The reported slope
+  is the exponential growth rate μ (hr⁻¹), i.e. the slope of ln(OD) vs time.
 - Produce log + linear growth-curve grids and growth-rate heatmaps.
 - Reuse the helpers directly from notebooks (all heavy lifting lives under
   `src/growthreader/`).

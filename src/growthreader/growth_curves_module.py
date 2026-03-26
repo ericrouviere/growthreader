@@ -309,7 +309,7 @@ def _fit_log_od_peak(
     OD_max: float,
     min_start_idx: int | None = None,
 ) -> tuple[float, float, np.ndarray | None, int | None, int | None]:
-    """Perform log2 regression using the peak-descend window selection."""
+    """Perform ln regression using the peak-descend window selection."""
     if OD_min <= 0 or OD_max <= 0:
         raise ValueError("OD bounds must be positive.")
 
@@ -375,7 +375,7 @@ def _fit_log_od_peak(
         return float("nan"), float("nan"), None, start_idx, end_idx
 
     x_fit = slice_times[positive_mask]
-    y_fit = np.log2(slice_values[positive_mask])
+    y_fit = np.log(slice_values[positive_mask])
     if not np.all(np.isfinite(y_fit)):
         return float("nan"), float("nan"), None, start_idx, end_idx
 
@@ -389,7 +389,7 @@ def fit_log_od_growth_rate(
     OD_min: float = DEFAULT_OD_MIN,
     OD_max: float = DEFAULT_OD_MAX,
 ) -> float:
-    """Fit a log2-growth slope using the peak-descend window heuristic."""
+    """Fit a ln-growth slope using the peak-descend window heuristic."""
     slope, _intercept, _, _, _ = _fit_log_od_peak(
         blanked_readings=readings,
         time_hours=time_hours,
@@ -552,7 +552,7 @@ def plot_plate_growth_curves(
         )
 
         if x_fit is not None and np.isfinite(slope) and np.isfinite(intercept):
-            y_line = np.exp2(slope * x_fit + intercept)
+            y_line = np.exp(slope * x_fit + intercept)
             ax.plot(
                 x_fit,
                 y_line,

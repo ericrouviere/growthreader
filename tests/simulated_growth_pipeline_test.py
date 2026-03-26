@@ -284,11 +284,10 @@ def run_pipeline(config: PipelineConfig) -> pd.DataFrame:
 #############################################################
 
 def expected_slopes_by_well() -> Dict[str, float]:
-    """Compute the analytic log2 slope for each simulated well."""
-    conversion = 1.0 / math.log(2.0)
+    """Compute the analytic ln slope for each simulated well."""
     labels = _well_labels()
     return {
-        display_well(labels[idx]): (idx * SLOPE_STEP) * conversion
+        display_well(labels[idx]): idx * SLOPE_STEP
         for idx in range(len(labels))
     }
 
