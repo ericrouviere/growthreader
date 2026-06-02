@@ -19,10 +19,18 @@ fluorescence behaviour quickly.
 ## Quick start
 1. Install once:
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate
+   cd growthreader
    pip install -e .
    ```
+   Alternatively, you can install inside a virtual environment to keep dependencies isolated:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate   # macOS/Linux
+   # .venv\Scripts\activate    # Windows
+   pip install -e .
+   ```
+   If you use a virtual environment, you must activate it (`source /path/to/growthreader/.venv/bin/activate`) each time you open a new terminal before importing growthreader.
+
 2. Copy `examples/measure_growth_rates_LP600.py` next to your data (or run it
    in place) and edit the parameter block:
    - `WORKBOOK_PATH`: LP600 or SynergyH1 workbook path.
