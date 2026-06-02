@@ -23,6 +23,7 @@ fluorescence behaviour quickly.
    ```
    Alternatively, you can install inside a virtual environment to keep dependencies isolated:
    ```bash
+   cd growthreader
    python -m venv .venv
    source .venv/bin/activate   # macOS/Linux
    # .venv\Scripts\activate    # Windows
