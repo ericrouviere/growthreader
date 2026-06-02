@@ -6,9 +6,8 @@ per‑well growth rates (μ, hr⁻¹), and emits CSV + PDF reports so you can au
 fluorescence behaviour quickly.
 
 ## Highlights
-- Parse every `*- Raw Data` worksheet from LP600 Excel files.
-- Load SynergyH1 exports (one plate per file) and pull every OD or
-  fluorescence channel automatically.
+- Parse LP600 Excel files (every `*- Raw Data` worksheet) or SynergyH1 exports
+  (one plate per file), pulling every OD or fluorescence channel automatically.
 - Blank wells, fit ln(OD) models between configurable `OD_min`/`OD_max`
   bounds, and record the exact window chosen for each well. The reported slope
   is the exponential growth rate μ (hr⁻¹), i.e. the slope of ln(OD) vs time.
@@ -31,9 +30,15 @@ fluorescence behaviour quickly.
    ```
    If you use a virtual environment, you must activate it (`source /path/to/growthreader/.venv/bin/activate`) each time you open a new terminal before importing growthreader.
 
-2. Copy `examples/measure_growth_rates_LP600.py` next to your data (or run it
-   in place) and edit the parameter block:
-   - `WORKBOOK_PATH`: LP600 or SynergyH1 workbook path.
+2. Choose the example script that matches your instrument and copy it next to
+   your data (or run it in place):
+   - **LP600 or SynergyH1 (OD ± fluorescence):** `examples/measure_growth_rates_LP600.py`
+   - **SynergyH1 fluorescence-only:** `examples/plot_OD_fluo_SynergyH1.py` —
+     blanks each channel, writes linear and log PDFs, and exports a
+     `growth_rates_plotter.csv` when an OD channel is present.
+
+   Edit the parameter block at the top of the script:
+   - `WORKBOOK_PATH`: path to your plate-reader workbook.
    - `MACHINE`: `"lp600"` or `"synergyh1"` to pick the parser.
    - `BLANK_POINTS`: number of low OD readings averaged per well.
    - `DEFAULT_OD_MIN` / `DEFAULT_OD_MAX`: bounds for the fitter. It walks
@@ -45,20 +50,15 @@ fluorescence behaviour quickly.
      SynergyH1 exports (others are plotted linearly without fitting).
 3. Run the pipeline:
    ```bash
-   python measure_growth_rates_LP600.py
+   python measure_growth_rates_LP600.py   # or plot_OD_fluo_SynergyH1.py
    ```
 4. Inspect `growth_rates.csv`, tweak per-well `OD_min`/`OD_max` if needed, and
    re-run to regenerate the plots in `plots/`.
 
-For SynergyH1 fluorescence-only runs, use
-`examples/plot_OD_fluo_SynergyH1.py`; it blanks each channel, writes linear and
-log PDFs, and exports a `growth_rates_plotter.csv` when an OD channel is
-present.
-
 ## Regression + notebook usage
 - `python tests/simulated_growth_pipeline_test.py` synthesizes a deterministic
-  workbook, runs the same pipeline as the LP600 script, and compares the fitted
-  slopes against ground truth. Use it whenever you touch core logic.
+  workbook, runs the full pipeline, and compares the fitted slopes against
+  ground truth. Use it whenever you touch core logic.
 - Direct imports:
   ```python
   from growthreader.growth_curves_module import load_raw_data, compute_time_in_hours, fit_log_od_growth_rates
