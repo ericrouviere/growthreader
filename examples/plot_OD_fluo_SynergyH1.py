@@ -32,11 +32,14 @@ LOG_YLIM_RANGE = 1e-4
 DEFAULT_OD_MIN = 0.01
 DEFAULT_OD_MAX = 0.1
 
-# Output directory for all PDFs.
-PLOTS_DIR = "plots_SynergyH1_example"
+# Name of directory to save plots.
+# Actual directory will be <PLOTS_DIR_PREFIX>_<name of workbook>
+PLOTS_DIR_PREFIX = "plots"
 
-# Destination for the exported growth-rate CSV (set to None to disable).
-GROWTH_RATES_CSV = "growth_rates_plotter.csv"
+# Name of CSV file to store growth rates and other data.
+# Actual file name will be <GROWTH_RATES_FILE_PREFIX>_<name of workbook>.csv
+# Set to None to disable.
+GROWTH_RATES_FILE_PREFIX = "growth_rates"
 
 # ---------------------------------------------------------------------------
 # Imports and setup
@@ -51,6 +54,10 @@ sys.path.insert(0, str(Path(GROWTHREADER_REPO).expanduser() / "src"))
 
 import numpy as np
 import pandas as pd
+
+_WORKBOOK_STEM = Path(WORKBOOK_PATH).stem
+GROWTH_RATES_CSV = f"{GROWTH_RATES_FILE_PREFIX}_{_WORKBOOK_STEM}.csv"
+PLOTS_DIR = f"{PLOTS_DIR_PREFIX}_{_WORKBOOK_STEM}"
 
 # Ensure Matplotlib/fontconfig caches live in writable directories.
 _MPL_CACHE = Path(".matplotlib_cache")
@@ -204,7 +211,7 @@ CONFIG = PlotConfig(
     log_ylim_range=LOG_YLIM_RANGE,
     default_od_min=DEFAULT_OD_MIN,
     default_od_max=DEFAULT_OD_MAX,
-    growth_rates_csv=GROWTH_RATES_CSV,
+    growth_rates_csv=Path(GROWTH_RATES_CSV) if GROWTH_RATES_FILE_PREFIX is not None else None,
 )
 
 if __name__ == "__main__":
