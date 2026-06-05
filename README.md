@@ -2,8 +2,8 @@
 
 Utilities for processing Agilent LP600 and SynergyH1 plate-reader exports.
 The toolkit blanks raw workbooks, converts timestamps to hours, fits
-per‑well growth rates (μ, hr⁻¹), and emits CSV + PDF reports so you can audit OD and
-fluorescence behaviour quickly.
+per‑well growth rates (μ, hr⁻¹), and emits CSV + PDF plots so you can audit OD and
+fluorescence behavior quickly.
 
 ## Highlights
 - Parse LP600 Excel files (every `*- Raw Data` worksheet) or SynergyH1 exports
@@ -16,45 +16,25 @@ fluorescence behaviour quickly.
   `src/growthreader/`).
 
 ## Quick start
-1. Install once:
-   ```bash
-   cd growthreader
-   pip install -e .
-   ```
-   Alternatively, you can install inside a virtual environment to keep dependencies isolated:
-   ```bash
-   cd growthreader
-   python -m venv .venv
-   source .venv/bin/activate   # macOS/Linux
-   # .venv\Scripts\activate    # Windows
-   pip install -e .
-   ```
-   If you use a virtual environment, you must activate it (`source /path/to/growthreader/.venv/bin/activate`) each time you open a new terminal before importing growthreader.
 
-2. Choose the example script that matches your instrument and copy it next to
-   your data (or run it in place):
-   - **LP600 or SynergyH1 (OD ± fluorescence):** `examples/measure_growth_rates_LP600.py`
-   - **SynergyH1 fluorescence-only:** `examples/plot_OD_fluo_SynergyH1.py` —
-     blanks each channel, writes linear and log PDFs, and exports a
-     `growth_rates_plotter.csv` when an OD channel is present.
+1. Clone or download this repository to a local folder. Make sure the folder is
+   named `growthreader`.
 
-   Edit the parameter block at the top of the script:
-   - `WORKBOOK_PATH`: path to your plate-reader workbook.
-   - `MACHINE`: `"lp600"` or `"synergyh1"` to pick the parser.
-   - `BLANK_POINTS`: number of low OD readings averaged per well.
-   - `DEFAULT_OD_MIN` / `DEFAULT_OD_MAX`: bounds for the fitter. It walks
-     backward from each well’s global peak: the first point below
-     `DEFAULT_OD_MAX` ends the fit, and the first point above
-     `DEFAULT_OD_MIN` on that descent starts it.
-   - `GROWTH_RATES_CSV` / `PLOTS_DIR`: output locations.
-   - `SYNERGYH1_OD_KEYWORDS`: strings that mark a channel as OD when parsing
-     SynergyH1 exports (others are plotted linearly without fitting).
-3. Run the pipeline:
+2. Copy the example script that matches your instrument from `examples/` to the
+   directory where your data lives:
+   - **LP600 or SynergyH1 (growth rates):** `examples/measure_growth_rates.py`
+   - **SynergyH1 (OD + fluorescence plots):** `examples/plot_OD_fluo_SynergyH1.py`
+
+3. In the copied script, edit the parameter block at the top:
+   - `GROWTHREADER_REPO`: absolute path to your local `growthreader` folder.
+   - `WORKBOOK_PATH`: name of your `.xlsx` data file.
+
+4. Run the script:
    ```bash
-   python measure_growth_rates_LP600.py   # or plot_OD_fluo_SynergyH1.py
+   python measure_growth_rates.py   # or plot_OD_fluo_SynergyH1.py
    ```
-4. Inspect `growth_rates.csv`, tweak per-well `OD_min`/`OD_max` if needed, and
-   re-run to regenerate the plots in `plots/`.
+5. Inspect the output CSV, tweak per-well `OD_min`/`OD_max` if needed, and
+   re-run to regenerate the plots.
 
 ## Regression + notebook usage
 - `python tests/simulated_growth_pipeline_test.py` synthesizes a deterministic
