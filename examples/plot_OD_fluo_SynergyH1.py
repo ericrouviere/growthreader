@@ -22,16 +22,6 @@ GROWTHREADER_REPO = "~/Dropbox/postdoc/code/growthreader"
 # SynergyH1 workbook path (relative to this script or absolute).
 WORKBOOK_PATH = "SynergyH1_example.xlsx"
 
-# Number of lowest readings per well to average when blanking.
-BLANK_POINTS = 5
-
-# Minimum fraction of the log-scale upper y-limit to use when data dips below zero.
-LOG_YLIM_RANGE = 1e-4
-
-# Default OD window used for fitting log-growth slopes.
-DEFAULT_OD_MIN = 0.01
-DEFAULT_OD_MAX = 0.1
-
 # Name of directory to save plots.
 # Actual directory will be <PLOTS_DIR_PREFIX>_<name of workbook>
 PLOTS_DIR_PREFIX = "plots"
@@ -40,6 +30,18 @@ PLOTS_DIR_PREFIX = "plots"
 # Actual file name will be <GROWTH_RATES_FILE_PREFIX>_<name of workbook>.csv
 # Set to None to disable.
 GROWTH_RATES_FILE_PREFIX = "growth_rates"
+
+
+# Number of lowest readings per well to average when blanking.
+BLANK_POINTS = 3
+
+# Minimum fraction of the log-scale upper y-limit to use when data dips below zero.
+LOG_YLIM_RANGE = 1e-4
+
+# Default OD window used for fitting log-growth slopes.
+DEFAULT_OD_MIN = 0.01
+DEFAULT_OD_MAX = 0.1
+
 
 # ---------------------------------------------------------------------------
 # Imports and setup
