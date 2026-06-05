@@ -27,14 +27,16 @@ GROWTHREADER_REPO = "~/Dropbox/postdoc/code/growthreader"
 # This can be replaced with an absolute path when the script lives elsewhere.
 WORKBOOK_PATH = "LP600_example.xlsx"
 
+# Name of CSV file to store growth rates and other data. 
+# Actual file name will be <GROWTH_RATES_FILE_PREFIX>_<name of workbook>.csv
+GROWTH_RATES_FILE_PREFIX = "growth_rates"
+
+# Name of directory to save plots.
+# Actual directory will be <PLOTS_DIR_PREFIX>_<name of workbook>
+PLOTS_DIR_PREFIX = "plots"
+
 # How many of the lowest OD readings per well to average for blanking.
 BLANK_POINTS = 3
-
-# Where to write/read the table of per-well slopes and OD bounds.
-GROWTH_RATES_CSV = "growth_rates.csv"
-
-# Directory for all generated PDF plots.
-PLOTS_DIR = "plots"
 
 # Default lower bound (OD) allowed for the log2 fit unless overridden per well.
 DEFAULT_OD_MIN = 0.02
@@ -70,10 +72,9 @@ sys.path.insert(0, str(Path(GROWTHREADER_REPO).expanduser() / "src"))
 import numpy as np
 import pandas as pd
 
-# Derive output names from the workbook stem.
 _WORKBOOK_STEM = Path(WORKBOOK_PATH).stem
-GROWTH_RATES_CSV = f"{_WORKBOOK_STEM}_growth_rates.csv"
-PLOTS_DIR = f"plots_{_WORKBOOK_STEM}"
+GROWTH_RATES_CSV = f"{GROWTH_RATES_FILE_PREFIX}_{_WORKBOOK_STEM}.csv"
+PLOTS_DIR = f"{PLOTS_DIR_PREFIX}_{_WORKBOOK_STEM}"
 
 # Ensure Matplotlib and fontconfig use writable cache directories even if HOME is read-only.
 # This avoids issues when the script runs in sandboxed environments (e.g., HPC nodes).
