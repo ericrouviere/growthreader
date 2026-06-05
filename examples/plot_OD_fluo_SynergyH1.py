@@ -15,6 +15,10 @@ from __future__ import annotations
 # Parameters
 # ---------------------------------------------------------------------------
 
+# Absolute path to your local clone of the growthreader repository.
+GROWTHREADER_REPO = "/path/to/growthreader"
+GROWTHREADER_REPO = "~/Dropbox/postdoc/code/growthreader"
+
 # SynergyH1 workbook path (relative to this script or absolute).
 WORKBOOK_PATH = "SynergyH1_example.xlsx"
 
@@ -39,8 +43,11 @@ GROWTH_RATES_CSV = "growth_rates_plotter.csv"
 # ---------------------------------------------------------------------------
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+sys.path.insert(0, str(Path(GROWTHREADER_REPO).expanduser() / "src"))
 
 import numpy as np
 import pandas as pd
