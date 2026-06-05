@@ -19,9 +19,13 @@ from __future__ import annotations
 # Parameters
 # ---------------------------------------------------------------------------
 
+# Absolute path to your local clone of the growthreader repository.
+#GROWTHREADER_REPO = "/path/to/growthreader"
+GROWTHREADER_REPO = "~/Dropbox/postdoc/code/growthreader"
+
 # Excel workbook exported from the Agilent LP600 or BioTek SynergyH1 (relative or absolute path).
 # This can be replaced with an absolute path when the script lives elsewhere.
-WORKBOOK_PATH = "260325_ER_OD_sacB_sucrose_test.xlsx"
+WORKBOOK_PATH = "LP600_example.xlsx"
 
 # How many of the lowest OD readings per well to average for blanking.
 BLANK_POINTS = 3
@@ -56,9 +60,12 @@ HEATMAP_ANNOTATE = True
 # ---------------------------------------------------------------------------
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
+
+sys.path.insert(0, str(Path(GROWTHREADER_REPO).expanduser() / "src"))
 
 import numpy as np
 import pandas as pd
